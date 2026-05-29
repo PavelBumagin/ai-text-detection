@@ -13,7 +13,7 @@ warnings.filterwarnings('ignore')
 
 ######### КОНФИГУРАЦИЯ И ЗАГРУЗКА МОДЕЛЕЙ ###############
 
-st.set_page_config(page_title="Детектор ИИ-текста (Эргономический сертификат)", page_icon="🎓", layout="wide")
+st.set_page_config(page_title="Детектор ИИ-текста", page_icon="🎓", layout="wide")
 
 @st.cache_resource
 def load_resources():
@@ -38,11 +38,11 @@ tokenizer, model = load_resources()
 
 def clean_text(text):
     """Исправляет склеенный при копировании текст, сохраняя структуру абзацев"""
-    # 1. Разделяем склеенные слова: 
+
     text = re.sub(r'([а-яёa-z])([А-ЯЁA-Z])', r'\1 \2', text)
-    # 2. Расставляем пробелы после точек/двоеточий: 
+
     text = re.sub(r'([а-яёa-zА-ЯЁA-Z])([.?!:])([А-ЯЁA-Zа-яёa-z])', r'\1\2 \3', text)
-    # 3. Убираем лишние горизонтальные пробелы и табуляцию, но сохраняем перенос строки \n
+
     text = re.sub(r'[ \t]+', ' ', text)
     return text.strip()
 
@@ -84,7 +84,7 @@ def analyze_text_pipeline(raw_text):
  
     #  Маскирование точек в списках до разбиения на предложения
   
-    # Ищем: начало строки -> маркер списка или цифра -> короткий тезис -> точка -> Пробел + Заглавная буква
+    # Поиск: начало строки -> маркер списка или цифра -> короткий тезис -> точка -> Пробел + Заглавная буква
     plain_list_pat = re.compile(
         r'^([ \t]*(?:[•●▪◦■◆◇✓✔➢➤\-–—*#]|\d+[\.\)]?)\s+[А-Яа-яЁёA-Za-z0-9\s]{2,40})'
         r'\.'
@@ -98,7 +98,7 @@ def analyze_text_pipeline(raw_text):
     # Очищаем текст (склеенные слова, лишние пробелы)
     text = clean_text(masked_text)
     
-    # Теперь NLTK не разобьет предложение на "Тезис." и "Описание."
+  
     sentences = nltk.sent_tokenize(text, language="russian")
     
     analyzed_sentences = []
@@ -121,7 +121,7 @@ def analyze_text_pipeline(raw_text):
         
         ppl, top10 = calculate_sentence_metrics(restored_sent)
         words_count = len(restored_sent.split())
-        
+        print(f'local ppl {ppl}')
         warnings = []
         is_pattern = False
         
@@ -147,7 +147,7 @@ def analyze_text_pipeline(raw_text):
             "warnings": warnings
         })
 
-    # Рассчитываем Всплесковость (Burstiness) по длинам предложений
+    # Рассчитываем Burstiness по длинам предложений
     if len(sentences) > 1:
         burstiness = float(np.std([s["words_count"] for s in analyzed_sentences]))
     else:
@@ -159,7 +159,7 @@ def analyze_text_pipeline(raw_text):
     # Для глобального расчета метрик документа также убираем плейсхолдеры
     restored_full_text = text.replace("_DOT_PLACEHOLDER_", ".")
     doc_ppl, doc_top10 = calculate_sentence_metrics(restored_full_text)
-
+    print(doc_ppl)
     return {
         "doc_metrics": {
             "ppl": doc_ppl,
@@ -172,7 +172,7 @@ def analyze_text_pipeline(raw_text):
     }
 
 
-###############  ВЫЧИСЛЕНИЕ ВЕРОЯТНОСТИ И ПРОСМОТР##################
+###############  ВЫЧИСЛЕНИЕ ВЕРОЯТНОСТИ И ПРОСМОТР ##################
 
 
 def calculate_ai_probability(metrics):
@@ -231,7 +231,7 @@ def generate_html_heatmap(sentences_data):
         clean_text_js = s_data['text'].replace("'", "\\'").replace('"', '\\"')
         warnings_js = ", ".join(s_data['warnings']).replace("'", "\\'")
         
-        # Добавляем JS-события наведения мыши
+
         html_content += f"""
         <span class='{span_class}' 
               style='background-color: {bg_color};' 
@@ -240,7 +240,7 @@ def generate_html_heatmap(sentences_data):
             {s_data['text']}
         </span> """
         
-    # Добавляем сам блок инспектора в конец контейнера
+
     html_content += """
     </div>
     
@@ -289,14 +289,14 @@ if st.button("Провести анализ", type="primary"):
     else:
         with st.spinner("Анализ..."):
             
-            # 1. Единый запуск конвейера (с чисткой текста)
+
             analysis_results = analyze_text_pipeline(user_input)
             doc_metrics = analysis_results['doc_metrics']
             
-            # 2. Интегральная оценка
+
             ai_prob = calculate_ai_probability(doc_metrics)
             
-            # 3. Рендер HTML
+
             heatmap_html = generate_html_heatmap(analysis_results['sentences'])
             
             # Вывод результатов
@@ -319,17 +319,17 @@ if st.button("Провести анализ", type="primary"):
             st.divider()
             st.markdown("### Количественные параметры")
             m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Перплексия (Норма > 40)", round(doc_metrics['ppl'], 1))
+            m1.metric("Перплексия (Норма >15)", round(doc_metrics['ppl'], 1))
             m2.metric("Слов из Top-10 (Норма < 75%)", f"{round(doc_metrics['top10'], 1)}%")
             m3.metric("Всплесковость (Норма > 4.0)", round(doc_metrics['burstiness'], 1))
-            m4.metric("Лексическое разн. (TTR)", round(doc_metrics['ttr'], 2))
+            m4.metric("Лексическое разнообразие. (TTR)", round(doc_metrics['ttr'], 2))
 
             st.divider()
             st.markdown("### Цветовая карта предсказуемости")
             st.markdown("🟩 Человек | 🟨 Смешанно | 🟥 ИИ. \n *Оранжевый пунктир — обнаружен синтаксический паттерн ИИ.*")
             
-            # Высота увеличена до 450, чтобы поместился инспектор
-            components.html(heatmap_html, height=450, scrolling=True)
+  
+            st.iframe(heatmap_html, height=450)
             
             # JSON Сертификат
             with st.expander("📄 Просмотреть  сертификат аутентичности (JSON)"):
